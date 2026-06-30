@@ -1,0 +1,96 @@
+!DOCTYPE html
+html lang=ko
+head
+    meta charset=UTF-8
+    meta name=viewport content=width=device-width, initial-scale=1.0
+    title독일 Diesel 가격 실시간 조회title
+    style
+        body { font-family Arial, sans-serif; max-width 600px; margin 0 auto; padding 20px; background-color #f4f4f9; }
+        h1 { text-align center; color #333; }
+        .btn { display block; width 100%; padding 12px; background-color #007bff; color white; text-align center; border none; border-radius 5px; font-size 16px; cursor pointer; margin-bottom 20px; }
+        .btnhover { background-color #0056b3; }
+        .station-card { background white; padding 15px; margin-bottom 10px; border-radius 8px; box-shadow 0 2px 4px rgba(0,0,0,0.1); }
+        .brand { font-size 18px; font-weight bold; color #222; }
+        .price { font-size 20px; color #d9534f; font-weight bold; float right; }
+        .info { font-size 14px; color #666; margin-top 5px; }
+        .status { display inline-block; padding 2px 6px; font-size 12px; border-radius 3px; color white; }
+        .open { background-color #28a745; }
+        .closed { background-color #dc3545; }
+    style
+head
+body
+
+    h1🇩🇪 독일 Diesel 가격 비교h1
+    button class=btn onclick=getPrices()현재 위치 기준 주유소 찾기 (반경 5km)button
+    
+    div id=resultsdiv
+
+    script
+         ⚠️ 주의 발급받은 본인의 Tankerkönig API Key를 여기에 넣으세요.
+        const API_KEY = 'YOUR_TANKERKOENIG_API_KEY'; 
+
+        function getPrices() {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = 'p style=text-aligncenter;위치 정보를 가져오는 중...p';
+
+            if (!navigator.geolocation) {
+                resultsDiv.innerHTML = 'p이 브라우저에서는 GPS 위치 정보를 지원하지 않습니다.p';
+                return;
+            }
+
+            navigator.geolocation.getCurrentPosition(
+                (position) = {
+                    const lat = position.coords.latitude;
+                    const lng = position.coords.longitude;
+                    fetchGasStationData(lat, lng);
+                },
+                (error) = {
+                    resultsDiv.innerHTML = 'p위치 정보를 가져오는데 실패했습니다. 권한을 허용해주세요.p';
+                }
+            );
+        }
+
+        async function fetchGasStationData(lat, lng) {
+            const resultsDiv = document.getElementById('results');
+             Tankerkönig 주유소 리스트 API (반경 5km, type=all로 주유소 및 가격 일괄 호출)
+            const url = `httpscreativecommons.tankerkoenig.dejsonlist.phplat=${lat}&lng=${lng}&rad=5&sort=dist&type=all&apikey=${API_KEY}`;
+
+            try {
+                resultsDiv.innerHTML = 'p style=text-aligncenter;실시간 가격 데이터 조회 중...p';
+                const response = await fetch(url);
+                const data = await response.json();
+
+                if (!data.ok  data.stations.length === 0) {
+                    resultsDiv.innerHTML = 'p주변에 주유소 정보가 없거나 오류가 발생했습니다.p';
+                    return;
+                }
+
+                 Diesel(디젤) 가격이 있는 주유소만 필터링 후 가격 낮은 순으로 정렬
+                let stations = data.stations.filter(s = s.diesel !== undefined && s.diesel  0);
+                stations.sort((a, b) = a.diesel - b.diesel);
+
+                resultsDiv.innerHTML = '';  기존 문구 클리어
+
+                stations.forEach(station = {
+                    const card = document.createElement('div');
+                    card.className = 'station-card';
+                    
+                    const isOpen = station.isOpen  'span class=status open영업중span'  'span class=status closed영업종료span';
+                    
+                    card.innerHTML = `
+                        span class=price€${station.diesel.toFixed(3)}span
+                        div class=brand${station.brand  station.name}div
+                        div class=info${station.street} ${station.houseNumber  ''}, ${station.postCode} ${station.place}div
+                        div class=info style=margin-top8px;거리 ${station.dist}km  상태 ${isOpen}div
+                    `;
+                    resultsDiv.appendChild(card);
+                });
+
+            } catch (error) {
+                console.error(error);
+                resultsDiv.innerHTML = 'p데이터를 불러오는 중 네트워크 오류가 발생했습니다.p';
+            }
+        }
+    script
+body
+html
