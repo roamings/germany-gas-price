@@ -21,19 +21,21 @@
 <body>
 
     <h1>🇩🇪 독일 Diesel 가격 비교</h1>
-    <button class="btn" onclick="getPrices()">현재 위치 기준 주유소 찾기 (반경 5km)</button>
+    <button class="btn" onclick="getPrices()">주유소 가격 조회하기</button>
     
     <div id="results"></div>
 
     <script>
+        // 발급받으신 고유 API KEY 연동 완료
         const API_KEY = '786539bf-928a-47bd-a199-62b8336e6567'; 
 
         function getPrices() {
             const resultsDiv = document.getElementById('results');
-            resultsDiv.innerHTML = '<p style="text-align:center;">위치 정보를 가져오는 중...</p>';
+            resultsDiv.innerHTML = '<p style="text-align:center;">위치 정보를 확인하는 중...</p>';
 
             if (!navigator.geolocation) {
-                resultsDiv.innerHTML = '<p>이 브라우저에서는 GPS 위치 정보를 지원하지 않습니다.</p>';
+                // GPS 미지원 시 기본값으로 뮌헨 중심가 조회
+                fetchGasStationData(48.1351, 11.5820, "독일 뮌헨 중심");
                 return;
             }
 
@@ -41,32 +43,44 @@
                 (position) => {
                     const lat = position.coords.latitude;
                     const lng = position.coords.longitude;
-                    fetchGasStationData(lat, lng);
+                    
+                    // 독일 위도/경도 범위 대략적 체크 (독일 범위를 벗어나면 뮌헨 기준으로 테스트)
+                    if (lat < 47 || lat > 55 || lng < 5 || lng > 15) {
+                        fetchGasStationData(48.1351, 11.5820, "독일 외 지역 감지: 뮌헨 기준");
+                    } else {
+                        fetchGasStationData(lat, lng, "현재 내 위치 기준");
+                    }
                 },
                 (error) => {
-                    resultsDiv.innerHTML = '<p>위치 정보를 가져오는데 실패했습니다. 권한을 허용해주세요.</p>';
+                    // 위치 권한 거부 시 뮌헨으로 대체 조회
+                    fetchGasStationData(48.1351, 11.5820, "위치 거부: 뮌헨 기준");
                 }
             );
         }
 
-        async function fetchGasStationData(lat, lng) {
+        async function fetchGasStationData(lat, lng, locationName) {
             const resultsDiv = document.getElementById('results');
-            const url = `https://creativecommons.tankerkoenig.de/json/list.php?lat=${lat}&lng=${lng}&rad=5&sort=dist&type=all&apikey=${API_KEY}`;
+            // 반경 10km 이내로 검색 범위를 넓혀 더 많은 주유소를 잡도록 수정했습니다.
+            const url = `https://creativecommons.tankerkoenig.de/json/list.php?lat=${lat}&lng=${lng}&rad=10&sort=dist&type=all&apikey=${API_KEY}`;
 
             try {
-                resultsDiv.innerHTML = '<p style="text-align:center;">실시간 가격 데이터 조회 중...</p>';
+                resultsDiv.innerHTML = `<p style="text-align:center;">[${locationName}] 실시간 데이터 조회 중...</p>`;
+                
                 const response = await fetch(url);
                 const data = await response.json();
 
                 if (!data.ok || !data.stations || data.stations.length === 0) {
-                    resultsDiv.innerHTML = '<p>주변에 주유소 정보가 없거나 오류가 발생했습니다.</p>';
+                    resultsDiv.innerHTML = `<p style="text-align:center;">${locationName} 주변 10km 이내에 주유소 정보가 없습니다.</p>`;
                     return;
                 }
 
+                // 디젤 가격이 정상적으로 표기된 주유소만 필터링
                 let stations = data.stations.filter(s => s.diesel !== undefined && s.diesel > 0);
+                
+                // 가격이 가장 낮은 순(최저가 순)으로 정렬
                 stations.sort((a, b) => a.diesel - b.diesel);
 
-                resultsDiv.innerHTML = ''; 
+                resultsDiv.innerHTML = `<p style="font-size:12px; color:#888; text-align:right;">기준: ${locationName}</p>`; 
 
                 stations.forEach(station => {
                     const card = document.createElement('div');
@@ -75,7 +89,7 @@
                     
                     card.innerHTML = `
                         <span class="price">€${station.diesel.toFixed(3)}</span>
-                        <div class="brand">${station.brand || station.name}</div>
+                        <div class="brand">${station.brand ? station.brand.toUpperCase() : station.name}</div>
                         <div class="info">${station.street} ${station.houseNumber || ''}, ${station.postCode} ${station.place}</div>
                         <div class="info" style="margin-top:8px;">거리: ${station.dist}km | 상태: ${isOpen}</div>
                     `;
@@ -84,7 +98,7 @@
 
             } catch (error) {
                 console.error(error);
-                resultsDiv.innerHTML = '<p>데이터를 불러오는 중 네트워크 오류가 발생했습니다.</p>';
+                resultsDiv.innerHTML = '<p style="text-align:center; color:red;">네트워크 오류가 발생했습니다. 잠시 후 다시 시도해주세요.</p>';
             }
         }
     </script>
