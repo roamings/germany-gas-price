@@ -26,7 +26,6 @@
     <div id="results"></div>
 
     <script>
-        // 발급받으신 고유 API KEY 연동 완료
         const API_KEY = '786539bf-928a-47bd-a199-62b8336e6567'; 
 
         function getPrices() {
@@ -34,8 +33,7 @@
             resultsDiv.innerHTML = '<p style="text-align:center;">위치 정보를 확인하는 중...</p>';
 
             if (!navigator.geolocation) {
-                // GPS 미지원 시 기본값으로 뮌헨 중심가 조회
-                fetchGasStationData(48.1351, 11.5820, "독일 뮌헨 중심");
+                fetchGasStationData(48.1351, 11.5820, "독일 뮌헨 중심(GPS 미지원)");
                 return;
             }
 
@@ -44,7 +42,7 @@
                     const lat = position.coords.latitude;
                     const lng = position.coords.longitude;
                     
-                    // 독일 위도/경도 범위 대략적 체크 (독일 범위를 벗어나면 뮌헨 기준으로 테스트)
+                    // 독일 위도/경도 범위 체크 (벗어나면 뮌헨 기준 테스트)
                     if (lat < 47 || lat > 55 || lng < 5 || lng > 15) {
                         fetchGasStationData(48.1351, 11.5820, "독일 외 지역 감지: 뮌헨 기준");
                     } else {
@@ -52,35 +50,46 @@
                     }
                 },
                 (error) => {
-                    // 위치 권한 거부 시 뮌헨으로 대체 조회
-                    fetchGasStationData(48.1351, 11.5820, "위치 거부: 뮌헨 기준");
-                }
+                    fetchGasStationData(48.1351, 11.5820, "위치 권한 거부: 뮌헨 기준");
+                },
+                { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 } // GPS 정확도 향상 옵션 추가
             );
         }
 
         async function fetchGasStationData(lat, lng, locationName) {
             const resultsDiv = document.getElementById('results');
-            // 반경 10km 이내로 검색 범위를 넓혀 더 많은 주유소를 잡도록 수정했습니다.
-            const url = `https://creativecommons.tankerkoenig.de/json/list.php?lat=${lat}&lng=${lng}&rad=10&sort=dist&type=all&apikey=${API_KEY}`;
+            // 💡 검색 반경을 25km(최대치)로 대폭 확장했습니다.
+            const url = `https://creativecommons.tankerkoenig.de/json/list.php?lat=${lat}&lng=${lng}&rad=25&sort=dist&type=all&apikey=${API_KEY}`;
 
             try {
-                resultsDiv.innerHTML = `<p style="text-align:center;">[${locationName}] 실시간 데이터 조회 중...</p>`;
+                resultsDiv.innerHTML = `<p style="text-align:center;">[${locationName}]<br>실시간 데이터 조회 중 (반경 25km)...</p>`;
                 
                 const response = await fetch(url);
                 const data = await response.json();
 
-                if (!data.ok || !data.stations || data.stations.length === 0) {
-                    resultsDiv.innerHTML = `<p style="text-align:center;">${locationName} 주변 10km 이내에 주유소 정보가 없습니다.</p>`;
+                // API 자체가 에러를 반환했을 때 원인 출력
+                if (data.ok === false) {
+                    resultsDiv.innerHTML = `<p style="text-align:center; color:red;">API 오류 발생: ${data.message || '인증 실패 또는 잘못된 요청'}</p>`;
+                    return;
+                }
+
+                if (!data.stations || data.stations.length === 0) {
+                    resultsDiv.innerHTML = `<p style="text-align:center;">${locationName}<br>주변 25km 이내에 주유소 정보가 없습니다.</p>`;
                     return;
                 }
 
                 // 디젤 가격이 정상적으로 표기된 주유소만 필터링
                 let stations = data.stations.filter(s => s.diesel !== undefined && s.diesel > 0);
                 
-                // 가격이 가장 낮은 순(최저가 순)으로 정렬
+                if (stations.length === 0) {
+                    resultsDiv.innerHTML = `<p style="text-align:center;">주변에 주유소는 있으나, 현재 Diesel 가격 정보를 제공하는 곳이 없습니다.</p>`;
+                    return;
+                }
+
+                // 최저가 순 정렬
                 stations.sort((a, b) => a.diesel - b.diesel);
 
-                resultsDiv.innerHTML = `<p style="font-size:12px; color:#888; text-align:right;">기준: ${locationName}</p>`; 
+                resultsDiv.innerHTML = `<p style="font-size:12px; color:#888; text-align:right; margin-bottom:10px;">기준: ${locationName} (반경 25km 최저가순)</p>`; 
 
                 stations.forEach(station => {
                     const card = document.createElement('div');
@@ -98,7 +107,7 @@
 
             } catch (error) {
                 console.error(error);
-                resultsDiv.innerHTML = '<p style="text-align:center; color:red;">네트워크 오류가 발생했습니다. 잠시 후 다시 시도해주세요.</p>';
+                resultsDiv.innerHTML = '<p style="text-align:center; color:red;">네트워크 오류 또는 API 서버 응답 지연이 발생했습니다.</p>';
             }
         }
     </script>
